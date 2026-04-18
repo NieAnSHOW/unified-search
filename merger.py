@@ -18,15 +18,9 @@ _TRACKING_PARAMS = frozenset(
     ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"]
 )
 
-_ENGINE_PRIORITY = {
-    "exa": 0.2,
-    "querit": 0.15,
-    "metaso": 0.12,
-    "aliyun_iqs": 0.10,
-    "brave": 0.08,
-    "duckduckgo": 0.05,
-    "bocha": 0.12,
-}
+_WEIGHT_TO_BONUS = 0.002  # weight * 0.002 => weight=100 → 0.20, weight=50 → 0.10
+
+_DEFAULT_WEIGHT = 50
 
 _CONFIDENCE_THRESHOLDS = [
     (3, "high"),
@@ -169,22 +163,31 @@ def _parse_freshness(freshness: Optional[str]) -> Optional[timedelta]:
 def calculate_score(
     result: SearchResult,
     freshness: Optional[str] = None,
+    engine_weights: Optional[Dict[str, int]] = None,
 ) -> float:
     """Calculate cross-validation score for a result.
 
     Scoring formula:
       base_score = len(source_engine) * 0.3
-      priority_bonus = highest priority among source engines
+      priority_bonus = highest weight among source engines * _WEIGHT_TO_BONUS
       recency_bonus = 0.1 if published_date within freshness window
 
     Final score is clamped to [0.0, 1.0].
+
+    Args:
+        result: The SearchResult to score.
+        freshness: Optional freshness window string (e.g. '7d', '1w').
+        engine_weights: Optional dict mapping engine name to weight (1-100).
     """
+    weights = engine_weights or {}
+
     base_score = len(result.source_engine) * 0.3
 
-    # Priority bonus: use the highest priority engine in the list.
+    # Priority bonus: use the highest weight engine in the list.
     priority_bonus = 0.0
     for engine in result.source_engine:
-        bonus = _ENGINE_PRIORITY.get(engine, 0.0)
+        w = weights.get(engine, _DEFAULT_WEIGHT)
+        bonus = w * _WEIGHT_TO_BONUS
         if bonus > priority_bonus:
             priority_bonus = bonus
 
@@ -230,6 +233,7 @@ def merge_results(
     engine_results: Dict[str, Optional[List[SearchResult]]],
     query: str = "",
     freshness: Optional[str] = None,
+    engine_weights: Optional[Dict[str, int]] = None,
 ) -> dict:
     """Merge results from multiple search engines.
 
@@ -237,6 +241,7 @@ def merge_results(
         engine_results: Mapping of engine name to its result list (or None if failed).
         query: The original search query.
         freshness: Optional freshness window string (e.g. '7d', '1w').
+        engine_weights: Optional dict mapping engine name to weight (1-100).
 
     Returns:
         A dict with keys:
@@ -265,7 +270,7 @@ def merge_results(
 
     # Calculate scores.
     for result in deduped:
-        result.score = calculate_score(result, freshness=freshness)
+        result.score = calculate_score(result, freshness=freshness, engine_weights=engine_weights)
 
     # Sort by score descending.
     deduped.sort(key=lambda r: r.score, reverse=True)

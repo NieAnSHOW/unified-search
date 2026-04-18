@@ -104,3 +104,30 @@ def get_enabled_engines(config):
         for name, engine_conf in engines.items()
         if isinstance(engine_conf, dict) and engine_conf.get("enabled") is True
     ]
+
+
+def get_engine_weights(config):
+    """Return a dict mapping engine name to its weight (int).
+
+    Weight range: 1-100. Higher weight = higher priority in result scoring.
+    Engines without a 'weight' key default to 50.
+
+    Args:
+        config: The full configuration dict.
+
+    Returns:
+        dict: {engine_name: weight_int, ...}
+    """
+    engines = config.get("engines", {})
+    if not isinstance(engines, dict):
+        return {}
+
+    weights = {}
+    for name, engine_conf in engines.items():
+        if not isinstance(engine_conf, dict):
+            continue
+        w = engine_conf.get("weight", 50)
+        if not isinstance(w, (int, float)) or w < 0:
+            w = 50
+        weights[name] = int(w)
+    return weights

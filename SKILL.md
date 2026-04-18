@@ -200,12 +200,14 @@ python3 /Users/niean/.cc-switch/skills/unified-search/dispatcher.py "query"
 ```json
 {
   "engines": {
-    "exa": { "api_key": "", "enabled": true },
-    "querit": { "api_key": "", "enabled": true },
-    "metaso": { "api_key": "", "enabled": true },
-    "brave": { "api_key": "", "enabled": true },
-    "duckduckgo": { "enabled": true },
-    "aliyun_iqs": { "api_key": "", "enabled": true }
+    "exa": { "api_key": "", "weight": 100, "enabled": true },
+    "querit": { "api_key": "", "weight": 75, "enabled": true },
+    "tavily": { "api_key": "", "weight": 70, "enabled": true },
+    "metaso": { "api_key": "", "weight": 60, "enabled": true },
+    "brave": { "api_key": "", "weight": 30, "enabled": true },
+    "duckduckgo": { "weight": 20, "enabled": true },
+    "aliyun_iqs": { "api_key": "", "weight": 40, "enabled": true },
+    "bocha": { "api_key": "", "weight": 50, "enabled": true }
   }
 }
 ```
@@ -213,11 +215,12 @@ python3 /Users/niean/.cc-switch/skills/unified-search/dispatcher.py "query"
 **配置路径**: `/Users/niean/.cc-switch/skills/unified-search/config.json`
 
 - `api_key`: 填入对应搜索引擎的 API Key
+- `weight`: 引擎权重（1-100），权重越高优先级越高，影响结果评分中的优先级加分
 - `enabled`: 设为 `false` 可禁用特定引擎
 - `duckduckgo` 无需 API Key，开箱即用
 - 至少需要 2 个引擎启用才能获得有效的交叉验证结果
 
-**支持的引擎优先级**（从高到低）: exa > querit > metaso > aliyun_iqs > brave > duckduckgo
+**默认权重排序**（从高到低）: exa(100) > querit(75) > tavily(70) > metaso(60) > bocha(50) > aliyun_iqs(40) > brave(30) > duckduckgo(20)
 
 ---
 

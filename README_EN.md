@@ -1,66 +1,122 @@
 <div align="center">
 
-[English](#README_EN.md) | [中文](#中文)
+# Unified Search
+
+**A Claude Code Skill — parallel multi-engine search with cross-validation for trustworthy results.**
+
+[![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Zero Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)]()
+
+English | [中文](README.md)
 
 </div>
 
 ---
-## Why This Project?
 
-If you've used LLMs, you've probably seen this: the model confidently cites a source, but when you click the link, the content doesn't match or the URL is broken. A single search engine is like having only one witness — you can't verify if it's telling the truth.
+## What Is This
 
-**Unified Search takes a simple approach: query multiple search engines in parallel, cross-validate results, and only mark results confirmed by multiple engines as high-confidence.**
+A search Skill for [Claude Code](https://claude.ai/code). Once activated, Claude no longer relies on a single search engine — it queries 8 engines in parallel, cross-validates results, and only marks results confirmed by multiple engines as high-confidence.
 
-## Quick Start
+```
+"What's new in Claude Code?"
+        ↓
+  ┌─ Exa ─────→ Result A
+  ├─ Tavily ──→ Result A ✓ cross-validated
+  ├─ Metaso ──→ Result A ✓
+  ├─ Brave ───→ Result B
+  └─ DuckDuckGo → Result A ✓
+        ↓
+  Result A: confidence=high (4 engines matched)
+  Result B: confidence=low  (1 engine matched)
+```
+
+## Why You Need It
+
+The biggest problem with AI search: single sources are unreliable. The model confidently cites a source, you click it — wrong content, broken link. Multiple independent sources confirming the same thing? That's worth trusting.
+
+## Installation
 
 ```bash
 git clone https://github.com/NieAnSHOW/unified-search.git
 cd unified-search
 cp config.example.json config.json
-# Edit config.json with your API keys (2+ engines needed for cross-validation)
-python3 dispatcher.py "your search query"
+# Edit config.json with at least 2 engine API keys
 ```
 
-## Features
+Place the project directory in your Claude Code skills folder. `SKILL.md` activates automatically.
 
-- **8 search engines** — Exa, Tavily, Querit, Metaso, Bocha, Brave, DuckDuckGo, Aliyun IQS
-- **Cross-validation** — Results confirmed by 3+ engines get `high` confidence, single-source gets `low`
-- **Zero dependencies** — Pure Python stdlib, no `pip install` needed
-- **Plugin architecture** — Add a new engine with one file, two methods
-- **Web Dashboard** — Engine health monitoring, live search testing, session stats
-- **Freshness filter** — Filter results by day/week/month/year
+## Usage
 
-## Adding a New Engine
+### As a Claude Code Skill (Recommended)
 
-```python
-# engines/my_engine.py
-from engines.base import BaseEngine, SearchResult
+Once activated, just ask Claude Code anything that requires search — it goes through the multi-engine pipeline automatically:
 
-class MyEngine(BaseEngine):
-    name = "my_engine"
-    display_name = "My Engine"
-    priority = 100
-    requires_key = True
+> "What are the latest AI coding tools in 2026?"
 
-    def search(self, query, max_results=10, freshness=None, config=None):
-        raw = self._call_api(query, config)
-        return self._normalize(raw)
+> "What tech news happened this week?"
 
-    def _normalize(self, raw_results):
-        return [SearchResult(title=r["title"], url=r["url"],
-                snippet=r["snippet"], source_engine=[self.name])
-                for r in raw_results]
-```
+> "Fact-check: is this claim true?"
 
-The dispatcher auto-discovers engines — no registration needed.
+Claude returns results with confidence labels — high-confidence results first, low-confidence ones flagged.
 
-## Tests
+### CLI
 
 ```bash
-python3 -m pytest tests/ -v
+# Basic search
+python3 dispatcher.py "Claude Code 2026 latest features"
+
+# Recent results only
+python3 dispatcher.py "Claude Code 2026 latest features" --freshness 1w
+
+# Specify engines
+python3 dispatcher.py "Claude Code 2026 latest features" --engines exa,tavily
+
+# Compact output
+python3 dispatcher.py "Claude Code 2026 latest features" --compact
 ```
 
-All tests use mocks — no real API keys required.
+### Web Dashboard
+
+```bash
+python3 dashboard.py --port 9728
+```
+
+Open `http://localhost:9728` in your browser for engine health monitoring, live search testing, and session stats.
+
+Or just say "启动可视化页面" in Claude Code.
+
+## Supported Search Engines
+
+| Engine | Type | API Key Required | Get It |
+|--------|------|-----------------|--------|
+| Exa | AI Search | Yes | [dashboard.exa.ai](https://dashboard.exa.ai) |
+| Tavily | AI Search | Yes | [tavily.com](https://tavily.com) |
+| Querit | AI Search | Yes | [querit.ai](https://querit.ai) |
+| Metaso | Chinese Search | Yes | [metaso.cn](https://metaso.cn) |
+| Bocha | China Search | Yes | [bocha.io](https://bocha.io) |
+| Brave | Web Search | Yes | [brave.com/search/api](https://brave.com/search/api) |
+| DuckDuckGo | Web Search | **No** | Works out of the box |
+| Aliyun IQS | Cloud Search | Yes | [aliyun.com/product/iqs](https://www.aliyun.com/product/iqs) |
+
+> **Minimum**: Enable 2+ engines for cross-validation. DuckDuckGo is free — start there.
+
+## Confidence Levels
+
+| Level | Condition | Meaning |
+|-------|-----------|---------|
+| `high` | 3+ engines return the same result | Cross-validated, trustworthy |
+| `medium` | 2 engines agree | Mostly reliable |
+| `low` | Only 1 engine | Single source, verify independently |
+
+## Adding New Engines
+
+Plugin architecture — two steps:
+
+1. Create a file in `engines/`, extend `BaseEngine`, implement `search()` and `_normalize()`
+2. Add config in `config.json`
+
+The dispatcher auto-discovers new engines — no registration needed.
 
 ## License
 

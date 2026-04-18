@@ -346,145 +346,179 @@ class TestDeduplicate(unittest.TestCase):
 # calculate_score
 # ---------------------------------------------------------------------------
 class TestCalculateScore(unittest.TestCase):
-    """Test cross-validation scoring."""
+    """Test cross-validation scoring with configurable weights."""
+
+    # Default weights matching config.json values for consistent testing
+    _DEFAULT_WEIGHTS = {
+        "exa": 100,
+        "querit": 75,
+        "tavily": 70,
+        "metaso": 60,
+        "aliyun_iqs": 40,
+        "brave": 30,
+        "duckduckgo": 20,
+        "bocha": 50,
+    }
 
     def _get(self):
         funcs = _get_merger()
         return funcs[2]  # calculate_score
 
-    def _make_with_score(self, source_engine, published_date=None, freshness=None):
+    def _make_with_score(self, source_engine, published_date=None, freshness=None, engine_weights=None):
         result = _make_result(source_engine=source_engine, published_date=published_date)
         from merger import calculate_score
-        return calculate_score(result, freshness=freshness)
+        weights = engine_weights if engine_weights is not None else self._DEFAULT_WEIGHTS
+        return calculate_score(result, freshness=freshness, engine_weights=weights)
 
     def test_single_engine_base_score(self):
-        """Single engine: base_score = 1 * 0.3 = 0.3, plus priority + recency."""
+        """Single engine: base_score = 1 * 0.3 = 0.3, plus weight bonus."""
         score = self._make_with_score(["duckduckgo"])
-        # duckduckgo priority = 0.05, no recency
-        expected = 0.3 + 0.05  # = 0.35
+        # duckduckgo weight = 20, bonus = 20 * 0.002 = 0.04
+        expected = 0.3 + 0.04  # = 0.34
         self.assertAlmostEqual(score, expected, places=4)
 
     def test_two_engines_base_score(self):
         score = self._make_with_score(["duckduckgo", "brave"])
-        # base = 2*0.3=0.6, highest priority = brave=0.08
-        expected = 0.6 + 0.08  # = 0.68
+        # base = 2*0.3=0.6, highest weight = brave=30, bonus = 30*0.002=0.06
+        expected = 0.6 + 0.06  # = 0.66
         self.assertAlmostEqual(score, expected, places=4)
 
     def test_three_engines_base_score(self):
         score = self._make_with_score(["duckduckgo", "brave", "metaso"])
-        # base = 3*0.3=0.9, highest priority = metaso=0.12
+        # base = 3*0.3=0.9, highest weight = metaso=60, bonus = 60*0.002=0.12
         expected = 0.9 + 0.12  # = 1.02, clamped to 1.0
         self.assertAlmostEqual(score, 1.0, places=4)
 
     def test_exa_priority_bonus(self):
         score = self._make_with_score(["exa"])
-        # base = 0.3, exa priority = 0.2
-        expected = 0.3 + 0.2  # = 0.5
+        # base = 0.3, exa weight = 100, bonus = 100*0.002 = 0.20
+        expected = 0.3 + 0.20  # = 0.5
         self.assertAlmostEqual(score, expected, places=4)
 
     def test_querit_priority_bonus(self):
         score = self._make_with_score(["querit"])
-        # base = 0.3, querit priority = 0.15
+        # base = 0.3, querit weight = 75, bonus = 75*0.002 = 0.15
         expected = 0.3 + 0.15  # = 0.45
         self.assertAlmostEqual(score, expected, places=4)
 
     def test_metaso_priority_bonus(self):
         score = self._make_with_score(["metaso"])
-        # base = 0.3, metaso priority = 0.12
+        # base = 0.3, metaso weight = 60, bonus = 60*0.002 = 0.12
         expected = 0.3 + 0.12  # = 0.42
         self.assertAlmostEqual(score, expected, places=4)
 
     def test_aliyun_iqs_priority_bonus(self):
         score = self._make_with_score(["aliyun_iqs"])
-        # base = 0.3, aliyun_iqs priority = 0.10
-        expected = 0.3 + 0.10  # = 0.40
+        # base = 0.3, aliyun_iqs weight = 40, bonus = 40*0.002 = 0.08
+        expected = 0.3 + 0.08  # = 0.38
         self.assertAlmostEqual(score, expected, places=4)
 
     def test_brave_priority_bonus(self):
         score = self._make_with_score(["brave"])
-        # base = 0.3, brave priority = 0.08
-        expected = 0.3 + 0.08  # = 0.38
+        # base = 0.3, brave weight = 30, bonus = 30*0.002 = 0.06
+        expected = 0.3 + 0.06  # = 0.36
         self.assertAlmostEqual(score, expected, places=4)
 
     def test_duckduckgo_priority_bonus(self):
         score = self._make_with_score(["duckduckgo"])
-        # base = 0.3, duckduckgo priority = 0.05
-        expected = 0.3 + 0.05  # = 0.35
+        # base = 0.3, duckduckgo weight = 20, bonus = 20*0.002 = 0.04
+        expected = 0.3 + 0.04  # = 0.34
         self.assertAlmostEqual(score, expected, places=4)
 
-    def test_unknown_engine_no_priority_bonus(self):
+    def test_unknown_engine_no_weight_in_map(self):
+        """Unknown engine uses default weight of 50 => bonus = 0.10."""
         score = self._make_with_score(["unknown_engine"])
-        # base = 0.3, no priority bonus
-        expected = 0.3
+        # base = 0.3, default weight = 50, bonus = 50*0.002 = 0.10
+        expected = 0.3 + 0.10  # = 0.40
+        self.assertAlmostEqual(score, expected, places=4)
+
+    def test_no_weights_uses_default(self):
+        """When engine_weights is None/empty, default weight 50 is used."""
+        score = self._make_with_score(["any_engine"], engine_weights={})
+        # base = 0.3, default weight = 50, bonus = 50*0.002 = 0.10
+        expected = 0.3 + 0.10
+        self.assertAlmostEqual(score, expected, places=4)
+
+    def test_custom_weight_overrides_default(self):
+        """Custom weight should override default values."""
+        custom_weights = {"exa": 30, "myengine": 90}
+        score = self._make_with_score(["exa"], engine_weights=custom_weights)
+        # base = 0.3, exa weight = 30, bonus = 30*0.002 = 0.06
+        expected = 0.3 + 0.06  # = 0.36
+        self.assertAlmostEqual(score, expected, places=4)
+
+    def test_weight_zero_means_no_bonus(self):
+        """Weight 0 should result in no priority bonus."""
+        score = self._make_with_score(["exa"], engine_weights={"exa": 0})
+        expected = 0.3  # base only
         self.assertAlmostEqual(score, expected, places=4)
 
     def test_highest_priority_used_when_multiple(self):
-        """When multiple engines, use the highest priority among them."""
+        """When multiple engines, use the highest weight among them."""
         score = self._make_with_score(["duckduckgo", "exa"])
-        # base = 2*0.3=0.6, highest = exa=0.2
-        expected = 0.6 + 0.2  # = 0.8
+        # base = 2*0.3=0.6, highest = exa=100, bonus = 100*0.002=0.20
+        expected = 0.6 + 0.20  # = 0.80
         self.assertAlmostEqual(score, expected, places=4)
 
     def test_recency_bonus_applied(self):
         """Recency bonus of 0.1 when published_date is within freshness window."""
         recent = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
         score = self._make_with_score(["duckduckgo"], published_date=recent, freshness="7d")
-        # base = 0.3, priority = 0.05, recency = 0.1
-        expected = 0.3 + 0.05 + 0.1  # = 0.45
+        # base = 0.3, weight = 20, bonus = 0.04, recency = 0.1
+        expected = 0.3 + 0.04 + 0.1  # = 0.44
         self.assertAlmostEqual(score, expected, places=4)
 
     def test_recency_bonus_not_applied_when_old(self):
         """No recency bonus when published_date is outside freshness window."""
         old = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
         score = self._make_with_score(["duckduckgo"], published_date=old, freshness="7d")
-        # base = 0.3, priority = 0.05, no recency
-        expected = 0.3 + 0.05  # = 0.35
+        # base = 0.3, weight = 20, bonus = 0.04, no recency
+        expected = 0.3 + 0.04  # = 0.34
         self.assertAlmostEqual(score, expected, places=4)
 
     def test_recency_bonus_not_applied_without_freshness(self):
         """No recency bonus when freshness is None."""
         recent = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
         score = self._make_with_score(["duckduckgo"], published_date=recent, freshness=None)
-        # base = 0.3, priority = 0.05, no recency (no freshness specified)
-        expected = 0.3 + 0.05  # = 0.35
+        # base = 0.3, weight = 20, bonus = 0.04, no recency (no freshness specified)
+        expected = 0.3 + 0.04  # = 0.34
         self.assertAlmostEqual(score, expected, places=4)
 
     def test_recency_bonus_not_applied_without_published_date(self):
         """No recency bonus when published_date is None."""
         score = self._make_with_score(["duckduckgo"], published_date=None, freshness="7d")
-        # base = 0.3, priority = 0.05, no recency (no date)
-        expected = 0.3 + 0.05  # = 0.35
+        # base = 0.3, weight = 20, bonus = 0.04, no recency (no date)
+        expected = 0.3 + 0.04  # = 0.34
         self.assertAlmostEqual(score, expected, places=4)
 
     def test_score_clamped_to_max_one(self):
         """Score should never exceed 1.0."""
         score = self._make_with_score(["exa", "querit", "metaso"], freshness="7d")
-        # base = 3*0.3=0.9, priority = exa=0.2, recency = 0.1 => 1.2, clamped to 1.0
+        # base = 3*0.3=0.9, highest weight = exa=100, bonus=0.20, recency = 0.1 => 1.2, clamped to 1.0
         self.assertAlmostEqual(score, 1.0, places=4)
 
     def test_score_clamped_to_min_zero(self):
         """Score should never be below 0.0."""
         result = _make_result(source_engine=[], score=0.0)
         from merger import calculate_score
-        score = calculate_score(result)
+        score = calculate_score(result, engine_weights=self._DEFAULT_WEIGHTS)
         # 0 engines => base=0, no priority, no recency => 0.0
         self.assertGreaterEqual(score, 0.0)
 
     def test_freshness_1d(self):
         """freshness='1d' should accept results from the last 1 day."""
-        # Use today's date string (midnight today) to guarantee it's within 1d.
         recent = datetime.utcnow().strftime("%Y-%m-%d")
         score = self._make_with_score(["duckduckgo"], published_date=recent, freshness="1d")
-        # base = 0.3, priority = 0.05, recency = 0.1
-        expected = 0.3 + 0.05 + 0.1  # = 0.45
+        # base = 0.3, weight = 20, bonus = 0.04, recency = 0.1
+        expected = 0.3 + 0.04 + 0.1  # = 0.44
         self.assertAlmostEqual(score, expected, places=4)
 
     def test_freshness_30d(self):
         """freshness='30d' should accept results from the last 30 days."""
         recent = (datetime.utcnow() - timedelta(days=20)).strftime("%Y-%m-%d")
         score = self._make_with_score(["duckduckgo"], published_date=recent, freshness="30d")
-        # base = 0.3, priority = 0.05, recency = 0.1
-        expected = 0.3 + 0.05 + 0.1  # = 0.45
+        # base = 0.3, weight = 20, bonus = 0.04, recency = 0.1
+        expected = 0.3 + 0.04 + 0.1  # = 0.44
         self.assertAlmostEqual(score, expected, places=4)
 
 
@@ -530,6 +564,11 @@ class TestDetermineConfidence(unittest.TestCase):
 class TestMergeResults(unittest.TestCase):
     """Test the main merge_results function."""
 
+    _DEFAULT_WEIGHTS = {
+        "exa": 100, "querit": 75, "tavily": 70, "metaso": 60,
+        "aliyun_iqs": 40, "brave": 30, "duckduckgo": 20, "bocha": 50,
+    }
+
     def _get(self):
         funcs = _get_merger()
         return funcs[4]  # merge_results
@@ -544,7 +583,7 @@ class TestMergeResults(unittest.TestCase):
                 _make_result(title="Querit Result", url="https://example.com/b", snippet="From querit", source_engine=["querit"]),
             ],
         }
-        merged = merge_results(engine_results)
+        merged = merge_results(engine_results, engine_weights=self._DEFAULT_WEIGHTS)
         self.assertEqual(merged["total_results"], 2)
         self.assertEqual(len(merged["results"]), 2)
         self.assertIn("exa", merged["engines_used"])
@@ -563,7 +602,7 @@ class TestMergeResults(unittest.TestCase):
                 _make_result(title="Result A Longer", url="https://example.com/x", snippet="Longer snippet here", source_engine=["querit"]),
             ],
         }
-        merged = merge_results(engine_results)
+        merged = merge_results(engine_results, engine_weights=self._DEFAULT_WEIGHTS)
         self.assertEqual(merged["total_results"], 1)
         r = merged["results"][0]
         self.assertEqual(r.title, "Result A Longer")
@@ -584,7 +623,7 @@ class TestMergeResults(unittest.TestCase):
                 _make_result(title="Cross Too", url="https://example.com/b", snippet="B", source_engine=["querit"]),
             ],
         }
-        merged = merge_results(engine_results)
+        merged = merge_results(engine_results, engine_weights=self._DEFAULT_WEIGHTS)
         # The cross-validated result (b) should have 2 engines => higher score
         self.assertEqual(merged["results"][0].url, "https://example.com/b")
 
@@ -596,7 +635,7 @@ class TestMergeResults(unittest.TestCase):
             ],
             "brave": None,  # failed
         }
-        merged = merge_results(engine_results)
+        merged = merge_results(engine_results, engine_weights=self._DEFAULT_WEIGHTS)
         self.assertIn("brave", merged["engines_failed"])
         self.assertNotIn("brave", merged["engines_used"])
 
@@ -606,7 +645,7 @@ class TestMergeResults(unittest.TestCase):
             "exa": [],
             "brave": None,
         }
-        merged = merge_results(engine_results)
+        merged = merge_results(engine_results, engine_weights=self._DEFAULT_WEIGHTS)
         self.assertIn("exa", merged["engines_used"])
         self.assertIn("brave", merged["engines_failed"])
 
@@ -623,7 +662,7 @@ class TestMergeResults(unittest.TestCase):
                     source_engine=["exa", "querit", "brave"],
                 ),
             ]
-        merged = merge_results(engine_results)
+        merged = merge_results(engine_results, engine_weights=self._DEFAULT_WEIGHTS)
         self.assertEqual(merged["overall_confidence"], "high")
 
     def test_overall_confidence_low(self):
@@ -634,7 +673,7 @@ class TestMergeResults(unittest.TestCase):
                 for i in range(5)
             ],
         }
-        merged = merge_results(engine_results)
+        merged = merge_results(engine_results, engine_weights=self._DEFAULT_WEIGHTS)
         self.assertEqual(merged["overall_confidence"], "low")
 
     def test_overall_confidence_medium(self):
@@ -650,7 +689,7 @@ class TestMergeResults(unittest.TestCase):
                 for i in range(3)
             ],
         }
-        merged = merge_results(engine_results)
+        merged = merge_results(engine_results, engine_weights=self._DEFAULT_WEIGHTS)
         # Top-5 includes 2 single-engine results => lowest confidence is "low"
         self.assertEqual(merged["overall_confidence"], "low")
 
@@ -662,13 +701,13 @@ class TestMergeResults(unittest.TestCase):
                 _make_result(title="R0", url="https://example.com/0", snippet="S", source_engine=["exa", "querit"]),
             ],
         }
-        merged = merge_results(engine_results)
+        merged = merge_results(engine_results, engine_weights=self._DEFAULT_WEIGHTS)
         # Only 1 result with 2 engines => medium
         self.assertEqual(merged["overall_confidence"], "medium")
 
     def test_empty_input(self):
         merge_results = self._get()
-        merged = merge_results({})
+        merged = merge_results({}, engine_weights=self._DEFAULT_WEIGHTS)
         self.assertEqual(merged["total_results"], 0)
         self.assertEqual(merged["results"], [])
         self.assertEqual(merged["engines_used"], [])
@@ -676,14 +715,14 @@ class TestMergeResults(unittest.TestCase):
 
     def test_timestamp_is_iso8601(self):
         merge_results = self._get()
-        merged = merge_results({"exa": []})
+        merged = merge_results({"exa": []}, engine_weights=self._DEFAULT_WEIGHTS)
         # Should be parseable as ISO 8601
         parsed = datetime.fromisoformat(merged["timestamp"])
         self.assertIsInstance(parsed, datetime)
 
     def test_query_passed_through(self):
         merge_results = self._get()
-        merged = merge_results({"exa": []}, query="test query")
+        merged = merge_results({"exa": []}, query="test query", engine_weights=self._DEFAULT_WEIGHTS)
         self.assertEqual(merged["query"], "test query")
 
     def test_freshness_passed_to_scoring(self):
@@ -703,6 +742,7 @@ class TestMergeResults(unittest.TestCase):
                 ],
             },
             query="test",
+            engine_weights=self._DEFAULT_WEIGHTS,
         )
         merged_with_freshness = merge_results(
             {
@@ -718,12 +758,29 @@ class TestMergeResults(unittest.TestCase):
             },
             query="test",
             freshness="7d",
+            engine_weights=self._DEFAULT_WEIGHTS,
         )
         # With freshness, the recent result should get a recency bonus => higher score
         self.assertGreater(
             merged_with_freshness["results"][0].score,
             merged_no_freshness["results"][0].score,
         )
+
+    def test_custom_weights_affect_ordering(self):
+        """Higher weight engines should produce higher-scored results."""
+        merge_results = self._get()
+        engine_results = {
+            "low_engine": [
+                _make_result(title="Low", url="https://example.com/low", snippet="Low", source_engine=["low_engine"]),
+            ],
+            "high_engine": [
+                _make_result(title="High", url="https://example.com/high", snippet="High", source_engine=["high_engine"]),
+            ],
+        }
+        weights = {"low_engine": 10, "high_engine": 100}
+        merged = merge_results(engine_results, engine_weights=weights)
+        # high_engine result should come first due to higher weight
+        self.assertEqual(merged["results"][0].url, "https://example.com/high")
 
 
 if __name__ == "__main__":

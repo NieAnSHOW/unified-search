@@ -7,7 +7,7 @@ import unittest
 # Ensure the parent directory is on sys.path so we can import config_loader
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from config_loader import load_config, validate_config, get_engine_config, get_enabled_engines
+from config_loader import load_config, validate_config, get_engine_config, get_enabled_engines, get_engine_weights
 
 
 class TestLoadConfig(unittest.TestCase):
@@ -18,7 +18,7 @@ class TestLoadConfig(unittest.TestCase):
         config_path = os.path.join(os.path.dirname(__file__), "..", "config.json")
         config = load_config(config_path)
         self.assertIsInstance(config, dict)
-        self.assertEqual(config["default_engines"], ["exa", "querit", "metaso", "brave", "duckduckgo"])
+        self.assertEqual(config["default_engines"], ["tavily", "querit", "metaso", "bocha", "exa"])
         self.assertEqual(config["min_engines"], 2)
         self.assertEqual(config["timeout_seconds"], 10)
         self.assertIn("engines", config)
@@ -193,6 +193,71 @@ class TestGetEnabledEngines(unittest.TestCase):
         config = {"engines": {}}
         result = get_enabled_engines(config)
         self.assertEqual(result, [])
+
+
+class TestGetEngineWeights(unittest.TestCase):
+    """Tests for get_engine_weights()."""
+
+    def test_returns_weights_from_config(self):
+        """get_engine_weights should extract weight values from engine configs."""
+        config = {
+            "engines": {
+                "exa": {"weight": 100, "enabled": True},
+                "brave": {"weight": 30, "enabled": True},
+                "duckduckgo": {"weight": 20, "enabled": True},
+            }
+        }
+        result = get_engine_weights(config)
+        self.assertEqual(result, {"exa": 100, "brave": 30, "duckduckgo": 20})
+
+    def test_defaults_to_50_when_weight_missing(self):
+        """Engines without weight should default to 50."""
+        config = {
+            "engines": {
+                "exa": {"weight": 100, "enabled": True},
+                "newengine": {"enabled": True},
+            }
+        }
+        result = get_engine_weights(config)
+        self.assertEqual(result["exa"], 100)
+        self.assertEqual(result["newengine"], 50)
+
+    def test_returns_empty_dict_when_no_engines(self):
+        """get_engine_weights should return empty dict when engines is empty."""
+        config = {"engines": {}}
+        result = get_engine_weights(config)
+        self.assertEqual(result, {})
+
+    def test_handles_missing_engines_key(self):
+        """get_engine_weights should return empty dict when no engines key."""
+        config = {}
+        result = get_engine_weights(config)
+        self.assertEqual(result, {})
+
+    def test_handles_invalid_weight_values(self):
+        """Invalid weight values should default to 50."""
+        config = {
+            "engines": {
+                "a": {"weight": "invalid", "enabled": True},
+                "b": {"weight": -10, "enabled": True},
+                "c": {"weight": None, "enabled": True},
+            }
+        }
+        result = get_engine_weights(config)
+        self.assertEqual(result["a"], 50)
+        self.assertEqual(result["b"], 50)
+        self.assertEqual(result["c"], 50)
+
+    def test_returns_int_values(self):
+        """Weight values should be integers."""
+        config = {
+            "engines": {
+                "exa": {"weight": 75.5, "enabled": True},
+            }
+        }
+        result = get_engine_weights(config)
+        self.assertIsInstance(result["exa"], int)
+        self.assertEqual(result["exa"], 75)
 
 
 if __name__ == "__main__":

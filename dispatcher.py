@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor, wait as futures_wait
 from pathlib import Path
 from typing import Dict, List, Optional, Type
 
-from config_loader import load_config, get_engine_config, get_enabled_engines
+from config_loader import load_config, get_engine_config, get_enabled_engines, get_engine_weights
 from engines.base import BaseEngine
 from merger import merge_results
 
@@ -341,10 +341,12 @@ def main() -> int:
     )
 
     # Merge results
+    engine_weights = get_engine_weights(config)
     merged = merge_results(
         parallel_result["results"],
         query=args.query,
         freshness=args.freshness,
+        engine_weights=engine_weights,
     )
     # Add failed engines from parallel step that are not already in merged
     existing_failed = set(merged.get("engines_failed", []))
