@@ -1,0 +1,46 @@
+{
+  "default_engines": ["tavily", "querit", "metaso", "bocha", "exa"],
+  "min_engines": 2,
+  "timeout_seconds": 10,
+  "max_results_per_engine": 10,
+  "freshness": null,
+  "engines": {
+    "exa": {
+      "api_key": "",
+      "type": "auto",
+      "enabled": true
+    },
+    "querit": {
+      "api_key": "",
+      "count": 10,
+      "enabled": true
+    },
+    "tavily": {
+      "api_key": "",
+      "search_depth": "basic",
+      "include_answer": false,
+      "enabled": true
+    },
+    "metaso": {
+      "api_key": "",
+      "scope": "webpage",
+      "enabled": true
+    },
+    "brave": {
+      "api_key": "",
+      "enabled": false
+    },
+    "duckduckgo": {
+      "enabled": true
+    },
+    "aliyun_iqs": {
+      "api_key": "",
+      "engine_type": "LiteAdvanced",
+      "enabled": false
+    },
+    "bocha": {
+      "api_key": "",
+      "enabled": true
+    }
+  }
+}

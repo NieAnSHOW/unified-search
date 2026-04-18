@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unified Search Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0f1a; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* Fixed Top */
+  .sticky-top { flex-shrink: 0; z-index: 100; background: #0f0f1a; }
+  .sticky-top::after { content: ''; position: absolute; left: 0; right: 0; bottom: -8px; height: 8px; background: linear-gradient(to bottom, rgba(15,15,26,0.9), transparent); pointer-events: none; }
+
+  /* Header / Search Bar */
+  .header { background: #1a1a2e; padding: 16px 24px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #2a2a3e; }
+  .logo { color: #7c7cff; font-weight: 700; font-size: 16px; white-space: nowrap; }
+  .search-box { flex: 1; display: flex; gap: 8px; }
+  .search-box input { flex: 1; background: #16213e; border: 1px solid #333; border-radius: 8px; padding: 10px 16px; color: #e0e0e0; font-size: 14px; outline: none; }
+  .search-box input:focus { border-color: #7c7cff; }
+  .search-box input::placeholder { color: #666; }
+  .search-box button { background: #7c7cff; color: #fff; border: none; border-radius: 8px; padding: 10px 24px; font-weight: 600; cursor: pointer; font-size: 14px; }
+  .search-box button:hover { background: #6a6aee; }
+  .search-box button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .restart-btn, .stop-btn { background: none; border: 1px solid #555; color: #888; padding: 10px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+  .restart-btn:hover { border-color: #facc15; color: #facc15; }
+  .stop-btn:hover { border-color: #f87171; color: #f87171; }
+  .restart-btn:disabled, .stop-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Engine Status */
+  .engine-bar { padding: 12px 24px; border-bottom: 1px solid #2a2a3e; background: #0f0f1a; }
+  .engine-bar-header { display: flex; align-items: center; justify-content: space-between;margin-bottom: 10px; }
+  .engine-bar h3 { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .engine-cards { display: flex; gap: 8px; flex-wrap: wrap; }
+  .engine-card { border-radius: 6px; padding: 8px 14px; text-align: center; min-width: 100px; flex: 1; position: relative; }
+  .engine-card .name { font-size: 13px; font-weight: 600; }
+  .engine-card .status { font-size: 11px; margin-top: 2px; }
+  .engine-card.healthy { background: #1a2e1a; border: 1px solid #2d5a2d; }
+  .engine-card.healthy .name, .engine-card.healthy .status { color: #4ade80; }
+  .engine-card.slow { background: #2e2e1a; border: 1px solid #5a5a2d; }
+  .engine-card.slow .name, .engine-card.slow .status { color: #facc15; }
+  .engine-card.error { background: #2e1a1a; border: 1px solid #5a2d2d; }
+  .engine-card.error .name, .engine-card.error .status { color: #f87171; }
+  .engine-card.disabled { background: #1a1a2e; border: 1px solid #444; }
+  .engine-card.disabled .name { color: #666; text-decoration: line-through; }
+  .engine-card.disabled .status { color: #555; }
+  .engine-card.disabled::before { content: 'OFF'; position: absolute; top: 4px; right: 6px; font-size: 9px; background: #333; color: #888; padding: 1px 5px; border-radius: 3px; }
+  .engine-card.checking .name, .engine-card.checking .status { color: #888; }
+  .engine-card a { display: inline-block; margin-top: 4px; }
+  .engine-card.disabled a { opacity: 0.4; }
+
+  /* Filter Bar */
+  .filter-bar { padding: 8px 24px; border-bottom: 1px solid #2a2a3e; background: #0f0f1a; display: none; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .filter-bar.visible { display: flex; }
+  .filter-bar .filter-label { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; }
+  .filter-btn { background: #16213e; border: 1px solid #333; color: #888; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  .filter-btn:hover { border-color: #7c7cff; color: #7c7cff; }
+  .filter-btn.active { background: #7c7cff; color: #fff; border-color: #7c7cff; }
+
+  /* Main Content */
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* Sidebar */
+  .sidebar { width: 240px; border-right: 1px solid #2a2a3e; padding: 16px; flex-shrink: 0; overflow-y: auto; }
+  .sidebar h3 { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+  .stat-item { margin-bottom: 14px; }
+  .stat-item .value { color: #e0e0e0; font-size: 24px; font-weight: 700; }
+  .stat-item .label { color: #888; font-size: 12px; }
+  .recent-list { margin-top: 16px; border-top: 1px solid #2a2a3e; padding-top: 12px; }
+  .recent-list h3 { margin-bottom: 8px; }
+  .recent-item { color: #888; font-size: 12px; padding: 3px 0; cursor: pointer; }
+  .recent-item:hover { color: #7c7cff; }
+
+  /* Results */
+  .results { flex: 1; padding: 16px 24px; overflow-y: auto; }
+  .results-header { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+  .result-card { background: #16213e; border-radius: 8px; padding: 14px; margin-bottom: 10px; }
+  .result-card .title { color: #7c7cff; font-size: 14px; font-weight: 600; text-decoration: none; }
+  .result-card .title:hover { text-decoration: underline; }
+  .result-card .url { color: #666; font-size: 12px; margin: 4px 0; }
+  .result-card .snippet { color: #bbb; font-size: 13px; line-height: 1.5; }
+  .result-card .tags { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .tag { font-size: 10px; padding: 2px 8px; border-radius: 4px; }
+  .tag.score { background: #1a2e1a; color: #4ade80; }
+  .tag.confidence-high { background: #1a2e1a; color: #4ade80; }
+  .tag.confidence-medium { background: #2e2e1a; color: #facc15; }
+  .tag.confidence-low { background: #2e1a1a; color: #f87171; }
+  .tag.engine { background: #1a1a2e; color: #7c7cff; }
+
+  /* Pagination */
+  .pagination { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 20px 0; }
+  .page-btn { background: #16213e; border: 1px solid #333; color: #888; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .page-btn:hover { border-color: #7c7cff; color: #7c7cff; }
+  .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .page-btn.active { background: #7c7cff; color: #fff; border-color: #7c7cff; }
+  .page-info { color: #888; font-size: 13px; }
+
+  /* Loading & Empty States */
+  .loading { text-align: center; color: #888; padding: 40px; }
+  .loading .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid #333; border-top-color: #7c7cff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty { text-align: center; color: #555; padding: 60px 20px; }
+  .error-msg { background: #2e1a1a; border: 1px solid #5a2d2d; border-radius: 8px; padding: 14px; color: #f87171; }
+
+  /* Refresh button */
+  .refresh-btn { background: none; border: 1px solid #333; color: #888; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+  .refresh-btn:hover { border-color: #7c7cff; color: #7c7cff; }
+</style>
+</head>
+<body>
+
+<div class="sticky-top">
+  <div class="header">
+    <div class="logo">Unified Search</div>
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="输入搜索关键词..." autofocus>
+      <button id="searchBtn" onclick="doSearch()">搜索</button>
+    </div>
+    <button class="stop-btn" id="stopBtn" onclick="doStop()">停止</button>
+    <button class="restart-btn" id="restartBtn" onclick="doRestart()">重启</button>
+  </div>
+
+  <div class="engine-bar">
+    <div class="engine-bar-header">
+      <h3>引擎状态</h3>
+      <button class="refresh-btn" onclick="checkHealth()">刷新</button>
+    </div>
+    <div class="engine-cards" id="engineCards"></div>
+  </div>
+
+  <div class="filter-bar" id="filterBar">
+    <span class="filter-label">按引擎筛选:</span>
+    <button class="filter-btn active" data-engine="" onclick="setFilter('')">全部</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <h3>会话统计</h3>
+    <div class="stat-item"><div class="value" id="statSearches">0</div><div class="label">总搜索次数</div></div>
+    <div class="stat-item"><div class="value" id="statAvgTime">-</div><div class="label">最近响应时间</div></div>
+    <div class="stat-item"><div class="value" id="statConfidence">-</div><div class="label">最近置信度</div></div>
+    <div class="recent-list">
+      <h3>最近搜索</h3>
+      <div id="recentList"></div>
+    </div>
+  </div>
+
+  <div class="results">
+    <div class="results-header" id="resultsHeader">输入关键词开始搜索</div>
+    <div id="resultsContainer">
+      <div class="empty">在上方输入关键词进行搜索，或等待引擎健康检查完成</div>
+    </div>
+    <div class="pagination" id="pagination"></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const PAGE_SIZE = 10;
+
+let allResults = [];
+let currentFilter = '';
+let currentPage = 1;
+
+// Engine portal links (paid engines only)
+const ENGINE_PORTALS = {
+  exa:       { url: 'https://exa.ai', label: 'Exa' },
+  querit:    { url: 'https://querit.ai', label: 'Querit' },
+  tavily:    { url: 'https://tavily.com', label: 'Tavily' },
+  metaso:    { url: 'https://metaso.cn', label: '秘塔' },
+  brave:     { url: 'https://brave.com/search/api/', label: 'Brave' },
+  aliyun_iqs:{ url: 'https://help.aliyun.com/product/ism-open-platform', label: '夸克' },
+  bocha:     { url: 'https://open.bochaai.com', label: '博查' },
+};
+
+// --- Health Check ---
+async function checkHealth() {
+  const container = $('engineCards');
+  container.innerHTML = '<div class="loading"><div class="spinner"></div> 检查引擎状态中...</div>';
+  try {
+    const res = await fetch('/api/health');
+    const engines = await res.json();
+    container.innerHTML = '';
+
+    // Sort: healthy first, then slow, error, disabled last
+    const order = { healthy: 0, slow: 1, error: 2, disabled: 3 };
+    engines.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+
+    engines.forEach(e => {
+      const card = document.createElement('div');
+      card.className = 'engine-card ' + e.status;
+      const displayName = e.display_name || e.name;
+      const statusText = {healthy: '● 正常', slow: '● 慢', error: '● 异常', disabled: '● 已禁用'}[e.status] || '● 检查中';
+      const latency = e.latency_ms ? `  ${Math.round(e.latency_ms)}ms` : '';
+      const errorInfo = e.error ? `<br><span style="font-size:10px">${escHtml(e.error)}</span>` : '';
+      const portal = ENGINE_PORTALS[e.name];
+      const portalLink = portal ? `<a href="${escAttr(portal.url)}" target="_blank" style="font-size:14px;color:#7c7cff;text-decoration:none;opacity:0.7;" title="开放平台">${portal.label} ↗</a>` : '';
+      card.innerHTML = `<div class="name">${escHtml(displayName)}</div><div class="status">${statusText}${latency}${errorInfo}</div>${portalLink}`;
+      container.appendChild(card);
+    });
+  } catch (err) {
+    container.innerHTML = '<div class="error-msg">健康检查失败: ' + escHtml(err.message) + '</div>';
+  }
+}
+
+// --- Search ---
+async function doSearch() {
+  const query = $('searchInput').value.trim();
+  if (!query) return;
+
+  const btn = $('searchBtn');
+  btn.disabled = true;
+  btn.textContent = '搜索中...';
+  $('resultsHeader').textContent = `搜索: "${query}"`;
+  $('resultsContainer').innerHTML = '<div class="loading"><div class="spinner"></div> 正在搜索...</div>';
+  $('pagination').innerHTML = '';
+
+  try {
+    const res = await fetch('/api/search?q=' + encodeURIComponent(query));
+    const data = await res.json();
+
+    if (data.error) {
+      $('resultsContainer').innerHTML = `<div class="error-msg">${escHtml(data.error)}</div>`;
+      allResults = [];
+    } else if (data.results.length === 0) {
+      $('resultsContainer').innerHTML = '<div class="empty">未找到相关结果</div>';
+      allResults = [];
+    } else {
+      allResults = data.results;
+      // Add overall metadata to each result
+      allResults._meta = {
+        total_results: data.total_results,
+        engines_used: data.engines_used,
+        elapsed_ms: data.elapsed_ms,
+        overall_confidence: data.overall_confidence,
+      };
+      currentFilter = '';
+      currentPage = 1;
+      buildFilterBar(data);
+      renderResults();
+    }
+
+    updateStats();
+  } catch (err) {
+    $('resultsContainer').innerHTML = '<div class="error-msg">搜索失败: ' + escHtml(err.message) + '</div>';
+    allResults = [];
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '搜索';
+  }
+}
+
+function buildFilterBar(data) {
+  const bar = $('filterBar');
+  // Extract unique engines from results
+  const engineSet = new Set();
+  data.results.forEach(r => {
+    (r.source_engine || []).forEach(e => engineSet.add(e));
+  });
+
+  bar.innerHTML = '<span class="filter-label">按引擎筛选:</span>';
+  const allBtn = document.createElement('button');
+  allBtn.className = 'filter-btn active';
+  allBtn.dataset.engine = '';
+  allBtn.textContent = '全部 (' + data.results.length + ')';
+  allBtn.onclick = () => setFilter('');
+  bar.appendChild(allBtn);
+
+  Array.from(engineSet).sort().forEach(eng => {
+    const count = data.results.filter(r => (r.source_engine || []).includes(eng)).length;
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn';
+    btn.dataset.engine = eng;
+    btn.textContent = eng + ' (' + count + ')';
+    btn.onclick = () => setFilter(eng);
+    bar.appendChild(btn);
+  });
+
+  bar.classList.add('visible');
+}
+
+function setFilter(engine) {
+  currentFilter = engine;
+  currentPage = 1;
+
+  // Update active button
+  $('filterBar').querySelectorAll('.filter-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.engine === engine);
+  });
+
+  renderResults();
+}
+
+function getFilteredResults() {
+  if (!currentFilter) return allResults;
+  return allResults.filter(r => (r.source_engine || []).includes(currentFilter));
+}
+
+function renderResults() {
+  const filtered = getFilteredResults();
+  const meta = allResults._meta || {};
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const pageResults = filtered.slice(start, start + PAGE_SIZE);
+
+  let headerParts = [];
+  if (meta.total_results) headerParts.push(meta.total_results + ' 条结果');
+  if (meta.engines_used) headerParts.push(meta.engines_used.length + ' 个引擎');
+  if (meta.elapsed_ms) headerParts.push(meta.elapsed_ms + 'ms');
+  if (meta.overall_confidence) headerParts.push('置信度: ' + meta.overall_confidence);
+  if (currentFilter) headerParts.push('筛选: ' + currentFilter);
+  $('resultsHeader').textContent = headerParts.join(' · ');
+
+  if (pageResults.length === 0) {
+    $('resultsContainer').innerHTML = '<div class="empty">当前筛选条件下无结果</div>';
+    $('pagination').innerHTML = '';
+    return;
+  }
+
+  let html = '';
+  pageResults.forEach(r => {
+    const confClass = 'confidence-' + (r.confidence || 'low');
+    const engines = (r.source_engine || []).join(', ');
+    html += `<div class="result-card">
+      <a class="title" href="${escAttr(r.url)}" target="_blank">${escHtml(r.title)}</a>
+      <div class="url">${escHtml(r.url)}</div>
+      <div class="snippet">${escHtml(r.snippet || '')}</div>
+      <div class="tags">
+        <span class="tag score">score: ${r.score !== undefined ? r.score.toFixed(2) : '-'}</span>
+        <span class="tag ${confClass}">${determineConfidence(r.source_engine || [])}</span>
+        ${engines ? `<span class="tag engine">${escHtml(engines)}</span>` : ''}
+      </div>
+    </div>`;
+  });
+  $('resultsContainer').innerHTML = html;
+
+  renderPagination(filtered.length, totalPages);
+}
+
+function renderPagination(total, totalPages) {
+  if (totalPages <= 1) { $('pagination').innerHTML = ''; return; }
+
+  let html = '';
+  html += `<button class="page-btn" onclick="goPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>上一页</button>`;
+
+  // Show page numbers with ellipsis
+  const pages = getPageNumbers(currentPage, totalPages);
+  pages.forEach(p => {
+    if (p === '...') {
+      html += '<span class="page-info">...</span>';
+    } else {
+      html += `<button class="page-btn ${p === currentPage ? 'active' : ''}" onclick="goPage(${p})">${p}</button>`;
+    }
+  });
+
+  html += `<span class="page-info">共 ${total} 条</span>`;
+  html += `<button class="page-btn" onclick="goPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>下一页</button>`;
+
+  $('pagination').innerHTML = html;
+}
+
+function getPageNumbers(current, total) {
+  if (total <= 7) return Array.from({length: total}, (_, i) => i + 1);
+  const pages = [];
+  if (current <= 4) {
+    for (let i = 1; i <= 5; i++) pages.push(i);
+    pages.push('...', total);
+  } else if (current >= total - 3) {
+    pages.push(1, '...');
+    for (let i = total - 4; i <= total; i++) pages.push(i);
+  } else {
+    pages.push(1, '...', current - 1, current, current + 1, '...', total);
+  }
+  return pages;
+}
+
+function goPage(page) {
+  const filtered = getFilteredResults();
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  if (page < 1 || page > totalPages) return;
+  currentPage = page;
+  renderResults();
+  // Scroll results to top
+  document.querySelector('.results').scrollTop = 0;
+}
+
+function determineConfidence(engines) {
+  if (engines.length >= 3) return 'high';
+  if (engines.length === 2) return 'medium';
+  return 'low';
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function escAttr(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// --- Stats ---
+async function updateStats() {
+  try {
+    const res = await fetch('/api/stats');
+    const stats = await res.json();
+    $('statSearches').textContent = stats.total_searches;
+    const times = Object.values(stats.engine_response_times);
+    if (times.length) {
+      const avg = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
+      $('statAvgTime').textContent = avg + 'ms';
+    }
+    if (stats.last_confidence) {
+      $('statConfidence').textContent = stats.last_confidence;
+    }
+    const list = $('recentList');
+    list.innerHTML = '';
+    (stats.recent_queries || []).slice().reverse().forEach(q => {
+      const div = document.createElement('div');
+      div.className = 'recent-item';
+      div.textContent = q;
+      div.onclick = () => { $('searchInput').value = q; doSearch(); };
+      list.appendChild(div);
+    });
+  } catch (err) {}
+}
+
+// --- Restart ---
+async function doRestart() {
+  if (!confirm('确定重启 Dashboard 服务？')) return;
+  const btn = $('restartBtn');
+  btn.disabled = true;
+  $('stopBtn').disabled = true;
+  btn.textContent = '重启中...';
+  try {
+    await fetch('/api/restart');
+    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#888;font-size:16px;">正在重启，请稍候...</div>';
+    setTimeout(() => location.reload(), 3000);
+  } catch (err) {
+    setTimeout(() => location.reload(), 2000);
+  }
+}
+
+// --- Stop ---
+async function doStop() {
+  if (!confirm('确定停止 Dashboard 服务？停止后需手动重启。')) return;
+  const btn = $('stopBtn');
+  btn.disabled = true;
+  $('restartBtn').disabled = true;
+  btn.textContent = '停止中...';
+  try {
+    await fetch('/api/stop');
+    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#888;font-size:16px;">服务已停止</div>';
+  } catch (err) {
+    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#888;font-size:16px;">服务已停止</div>';
+  }
+}
+
+// --- Init ---
+document.addEventListener('DOMContentLoaded', () => {
+  checkHealth();
+  updateStats();
+  $('searchInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doSearch();
+  });
+});
+</script>
+</body>
+</html>
